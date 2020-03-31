@@ -26,18 +26,33 @@ import numpy as np
 import tensorflow as tf
 
 if tf.__version__[0] == "2":
-    from tensorflow.keras.models import Model
-    from tensorflow.keras.activations import relu
-    from tensorflow.keras.layers import Layer, InputSpec, Conv2D, DepthwiseConv2D, UpSampling2D, ZeroPadding2D, Lambda, AveragePooling2D, Input, Activation, Concatenate, Add, Reshape, BatchNormalization, Dropout 
-    from tensorflow.python.keras.engine import get_source_inputs
-    from tensorflow.keras import backend as K
+    
+    # OSAMA CHANGED THIS
+    from keras import backend as K
+    from keras.models import Model
+    from keras.activations import relu
+    from keras.layers import Layer, InputSpec, Conv2D, DepthwiseConv2D, UpSampling2D, ZeroPadding2D, Lambda, AveragePooling2D, Input, Activation, Concatenate, Add, Reshape, BatchNormalization, Dropout 
+    from keras.utils import get_source_inputs
+    from keras import backend as K
 else:
     from keras.models import Model
     from keras.activations import relu
     from keras.layers import Conv2D, DepthwiseConv2D, UpSampling2D, ZeroPadding2D, Lambda, AveragePooling2D, Input, Activation, Concatenate, Add, Reshape, BatchNormalization, Dropout 
     from keras.engine import Layer, InputSpec
     from keras.engine.topology import get_source_inputs
-    from keras import backend as K
+    
+#     from tensorflow.keras.models import Model
+#     from tensorflow.keras.activations import relu
+#     from tensorflow.keras.layers import Layer, InputSpec, Conv2D, DepthwiseConv2D, UpSampling2D, ZeroPadding2D, Lambda, AveragePooling2D, Input, Activation, Concatenate, Add, Reshape, BatchNormalization, Dropout 
+#     from tensorflow.keras.utils import get_source_inputs
+#     from tensorflow.keras import backend as K
+# else:
+#     from keras.models import Model
+#     from keras.activations import relu
+#     from keras.layers import Conv2D, DepthwiseConv2D, UpSampling2D, ZeroPadding2D, Lambda, AveragePooling2D, Input, Activation, Concatenate, Add, Reshape, BatchNormalization, Dropout 
+#     from keras.engine import Layer, InputSpec
+#     from keras.engine.topology import get_source_inputs
+#     from keras import backend as K
 
 WEIGHTS_PATH_X = "https://github.com/bonlime/keras-deeplab-v3-plus/releases/download/1.1/deeplabv3_xception_tf_dim_ordering_tf_kernels.h5"
 WEIGHTS_PATH_MOBILE = "https://github.com/bonlime/keras-deeplab-v3-plus/releases/download/1.1/deeplabv3_mobilenetv2_tf_dim_ordering_tf_kernels.h5"
@@ -165,7 +180,7 @@ def _make_divisible(v, divisor, min_value=None):
 
 
 def _inverted_res_block(inputs, expansion, stride, alpha, filters, block_id, skip_connection, rate=1):
-    in_channels = inputs._keras_shape[-1]
+    in_channels = inputs.shape[-1]
     pointwise_conv_filters = int(filters * alpha)
     pointwise_filters = _make_divisible(pointwise_conv_filters, 8)
     x = inputs
@@ -379,7 +394,7 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, infer = False,
     b4 = BatchNormalization(name='image_pooling_BN', epsilon=1e-5)(b4)
     b4 = Activation('relu')(b4)
     
-    b4 = Lambda(lambda x: K.tf.image.resize_bilinear(x,size=(int(np.ceil(input_shape[0]/OS)), int(np.ceil(input_shape[1]/OS)))))(b4)
+    b4 = Lambda(lambda x: tf.image.resize(x, size=(int(np.ceil(input_shape[0]/OS)), int(np.ceil(input_shape[1]/OS)))))(b4)
 
     # simple 1x1
     b0 = Conv2D(256, (1, 1), padding='same', use_bias=False, name='aspp0')(x)
@@ -415,7 +430,7 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, infer = False,
         # Feature projection
         # x4 (x2) block
 
-        x = Lambda(lambda x: K.tf.image.resize_bilinear(x,size=(int(np.ceil(input_shape[0]/4)), int(np.ceil(input_shape[1]/4)))))(x)
+        x = Lambda(lambda x: tf.image.resize(x, size=(int(np.ceil(input_shape[0]/4)), int(np.ceil(input_shape[1]/4)))))(x)
         
         dec_skip1 = Conv2D(48, (1, 1), padding='same',
                            use_bias=False, name='feature_projection0')(skip1)
@@ -436,7 +451,7 @@ def Deeplabv3(weights='pascal_voc', input_tensor=None, infer = False,
     
     
     x = Conv2D(classes, (1, 1), padding='same', name=last_layer_name)(x)
-    x = Lambda(lambda x: K.tf.image.resize_bilinear(x,size=(input_shape[0],input_shape[1])))(x)
+    x = Lambda(lambda x: tf.image.resize(x, size=(input_shape[0],input_shape[1])))(x)
     if infer:
         x = Activation('softmax')(x)
     else:

@@ -11,18 +11,33 @@ import tensorflow as tf
 
 if tf.__version__[0] == "2":
     _IS_TF_2 = True
-    import tensorflow.keras.backend as K
-    from tensorflow.keras.utils import Sequence
-    from tensorflow.keras.optimizers import Adam, SGD, RMSprop
-    from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping, LambdaCallback
-    from tensorflow.keras.layers import *
+    
+    # OSAMA CHANGED THIS
+    import keras.backend as K
+    from keras.utils import Sequence
+    from keras.optimizers import Adam, SGD, RMSprop
+    from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping, LambdaCallback
+    from keras.layers import *
     from subpixel import *
-    from tensorflow.keras.models import Model, Sequential
-    from tensorflow.keras.callbacks import TensorBoard
-    from tensorflow.keras.preprocessing.image import ImageDataGenerator
-    from tensorflow.python.client import device_lib
-    from tensorflow.keras.regularizers import l2
-    from tensorflow.keras.utils import to_categorical
+    from keras.models import Model, Sequential
+    from keras.callbacks import TensorBoard
+    from keras.preprocessing.image import ImageDataGenerator
+    from keras.regularizers import l2
+    from keras.utils import to_categorical
+    
+    
+#     import tensorflow.keras.backend as K
+#     from tensorflow.keras.utils import Sequence
+#     from tensorflow.keras.optimizers import Adam, SGD, RMSprop
+#     from tensorflow.keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, EarlyStopping, LambdaCallback
+#     from tensorflow.keras.layers import *
+#     from subpixel import *
+#     from tensorflow.keras.models import Model, Sequential
+#     from tensorflow.keras.callbacks import TensorBoard
+#     from tensorflow.keras.preprocessing.image import ImageDataGenerator
+#     from tensorflow.python.client import device_lib
+#     from tensorflow.keras.regularizers import l2
+#     from tensorflow.keras.utils import to_categorical
 else:
     _IS_TF_2 = False
     import keras
@@ -98,44 +113,36 @@ def get_available_gpus():
 
 def get_VOC2012_classes():
     PASCAL_VOC_classes = {
-        0: 'background', 
-        1: 'airplane',
-        2: 'bicycle',
-        3: 'bird', 
-        4: 'boat',
-        5: 'bottle',
-        6: 'bus',
-        7: 'car',
-        8: 'cat',
-        9: 'chair',
-        10: 'cow',
-        11: 'table',
-        12: 'dog',
-        13: 'horse',
-        14: 'motorbike',
-        15: 'person',
-        16: 'potted_plant',
-        17: 'sheep',
-        18: 'sofa',
-        19 : 'train',
-        20 : 'tv',
-        21 : 'void'
+        0: "background/ignore",
+        1: "ceiling",
+        2: "floor, flooring",
+        3: "wall",
+        4: "windowpane, window",
     }
+
     return PASCAL_VOC_classes
 
 
 def sparse_crossentropy_ignoring_last_label(y_true, y_pred):
     nb_classes = K.int_shape(y_pred)[-1]
-    y_true = K.one_hot(tf.to_int32(y_true[:,:,0]), nb_classes+1)[:,:,:-1]
+    y_true = K.one_hot(tf.cast(y_true[:,:,0], tf.int32), nb_classes+1)[:,:,:-1]
     return K.categorical_crossentropy(y_true, y_pred)
 
 def sparse_accuracy_ignoring_last_label(y_true, y_pred):
     nb_classes = K.int_shape(y_pred)[-1]
     y_pred = K.reshape(y_pred, (-1, nb_classes))
-    y_true = tf.to_int64(K.flatten(y_true))
+    y_true = tf.cast(K.flatten(y_true), tf.int64)
     legal_labels = ~K.equal(y_true, nb_classes)
-    return K.sum(tf.to_float(legal_labels & K.equal(y_true, 
-                                                    K.argmax(y_pred, axis=-1)))) / K.sum(tf.to_float(legal_labels))
+    
+    denominator = K.sum(tf.cast(legal_labels, tf.float32))
+    numerator = K.sum(tf.cast(legal_labels & K.equal(y_true, 
+                                                     K.argmax(y_pred, axis=-1)),
+                              tf.float32)) 
+    return numerator / denominator
+
+#     return K.sum(tf.to_float(legal_labels & K.equal(y_true, 
+#                                                     K.argmax(y_pred, axis=-1)))) / K.sum(tf.cast(legal_labels), tf.float32)
+
 def Jaccard(y_true, y_pred):
     nb_classes = K.int_shape(y_pred)[-1]
     iou = []
@@ -143,9 +150,9 @@ def Jaccard(y_true, y_pred):
     for i in range(0, nb_classes): # exclude first label (background) and last label (void)
         true_labels = K.equal(y_true[:,:,0], i)
         pred_labels = K.equal(pred_pixels, i)
-        inter = tf.to_int32(true_labels & pred_labels)
-        union = tf.to_int32(true_labels | pred_labels)
-        legal_batches = K.sum(tf.to_int32(true_labels), axis=1)>0
+        inter = tf.cast(true_labels & pred_labels, tf.int32)
+        union = tf.cast(true_labels | pred_labels, tf.int32)
+        legal_batches = K.sum(tf.cast(true_labels, tf.int32), axis=1)>0
         ious = K.sum(inter, axis=1)/K.sum(union, axis=1)
         if _IS_TF_2:
             iou.append(K.mean(ious[legal_batches]))
@@ -187,15 +194,19 @@ class SegModel:
             scale = 8
         if net == 'original':
             x = Conv2D(n, (1, 1), padding='same', name='conv_upsample')(base_model.output)
-            x = Lambda(lambda x: K.tf.image.resize_bilinear(x,size=(self.sz[0],self.sz[1])))(x)
-            x = Reshape((self.sz[0]*self.sz[1], -1)) (x)
+            x = Lambda(lambda x: tf.keras.backend.resize_images(x, self.sz[0], self.sz[1],
+                                                                'channels_last',
+                                                                'bilinear'))(x)
+            x = Reshape((self.sz[0] * self.sz[1], -1))(x)
             x = Activation('softmax', name = 'pred_mask')(x)
             model = Model(base_model.input, x, name='deeplabv3p')
+            
         elif net == 'subpixel':
             x = Subpixel(n, 1, scale, padding='same')(base_model.output)
-            x = Reshape((self.sz[0]*self.sz[1], -1)) (x)
-            x = Activation('softmax', name = 'pred_mask')(x)
+            x = Reshape((self.sz[0] * self.sz[1], -1))(x)
+            x = Activation('softmax', name='pred_mask')(x)
             model = Model(base_model.input, x, name='deeplabv3p_subpixel')
+
         # Do ICNR
         for layer in model.layers:
             if type(layer) == Subpixel:
@@ -213,15 +224,17 @@ class SegModel:
         self.model = model
         return model
 
-    def create_generators(self, crop_shape=False, mode='train', do_ahisteq=True, n_classes=21, horizontal_flip=True, 
-                          vertical_flip=False, blur=False, with_bg=True, brightness=0.1, rotation=5.0, 
-                          zoom=0.1, validation_split=.2, seed=7):
+    def create_generators(self, crop_shape=False, mode='train', do_ahisteq=True, n_classes=21,
+                          horizontal_flip=True, vertical_flip=False, blur=False, with_bg=True,
+                          brightness=0.1, rotation=5.0, zoom=0.1, validation_split=.2, seed=7):
                 
-        generator = SegmentationGenerator(folder = self.mainpath, mode = mode, n_classes = n_classes, do_ahisteq = do_ahisteq,
-                                       batch_size=self.batch_size, resize_shape=self.sz[::-1], crop_shape=crop_shape, 
-                                       horizontal_flip=horizontal_flip, vertical_flip=vertical_flip, blur = blur,
-                                       brightness=brightness, rotation=rotation, zoom=zoom,
-                                       validation_split = validation_split, seed = seed)
+        generator = SegmentationGenerator(folder=self.mainpath, mode=mode,
+                                          n_classes=n_classes, do_ahisteq=do_ahisteq,
+                                          batch_size=self.batch_size, resize_shape=self.sz[::-1],
+                                          crop_shape=crop_shape, horizontal_flip=horizontal_flip,
+                                          vertical_flip=vertical_flip, blur=blur,
+                                          brightness=brightness,rotation=rotation, zoom=zoom,
+                                          validation_split = validation_split, seed = seed)
                 
         return generator
 
